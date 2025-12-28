@@ -23,3 +23,7 @@ A | B
 * Detects and reports formulaic cycles
 
 Internally separated by '|' to avoid function argument conflicts.
+
+Build & Run with:
+go build -o GoExcel main.go
+./GoExcel start inputFileName.csv //should be '|' separated
