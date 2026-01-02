@@ -178,8 +178,7 @@ func CheckValidRef(data string, table [][]string, vis map[Pos]bool) (string, str
     row, col := UnpackRef(data)
 
     if row < 0 || col < 0 || row >= len(table) || col >= len(table[0]) {
-        fmt.Println("Out of bounds error in cell!")
-        os.Exit(1)
+        return "#BOUNDS", "ERR", "#BOUNDS"
     }
 
     p := Pos{Row: row, Col: col}
@@ -187,8 +186,7 @@ func CheckValidRef(data string, table [][]string, vis map[Pos]bool) (string, str
     pType := GetType(refVal)
 
     if vis[p] {
-        fmt.Printf("Cyclic reference detected at %s!\n", data)
-        os.Exit(1)
+        return "#CYCLE", "ERR", "#CYCLE"
     }
 
     if pType == "ref" || pType == "formula" {
@@ -208,7 +206,7 @@ func CheckValidRef(data string, table [][]string, vis map[Pos]bool) (string, str
     return refVal, pType, ""
 }
 
-func EvalExpr(postfix []string, table [][]string, r int, c int, vis map[Pos]bool) (string, string) {
+func EvalExpr(postfix []string, table [][]string, r int, c int, vis map[Pos]bool) string {
     s := StringStack{}
     vis[Pos{Row: r, Col: c}] = true
 
@@ -219,17 +217,25 @@ func EvalExpr(postfix []string, table [][]string, r int, c int, vis map[Pos]bool
             B, _ := s.Pop()
             A, _ := s.Pop()
 
-            typeA, typeB := GetType(A), GetType(B)
             valA, valB := A, B
+            typeA, typeB := GetType(A), GetType(B)
+            var errA, errB string
+
             if typeA == "ref" {
-                valA, typeA, _ = CheckValidRef(A, table, vis)
+                valA, typeA, errA = CheckValidRef(A, table, vis)
             }
             if typeB == "ref" {
-                valB, typeB, _ = CheckValidRef(B, table, vis)
+                valB, typeB, errB = CheckValidRef(B, table, vis)
             }
-        
-            if !(typeA == "float" && typeB == "float") {
-                return "0", "Type mismatch error"
+
+            if errA != "" { return errA }
+            if errB != "" { return errB }
+            
+            if strings.HasPrefix(valA, "#") { return valA }
+            if strings.HasPrefix(valB, "#") { return valB }
+
+            if typeA != "float" || typeB != "float" {
+                return "#TYPE!"
             }
 
             useA, _ := strconv.ParseFloat(valA, 64)
@@ -237,34 +243,43 @@ func EvalExpr(postfix []string, table [][]string, r int, c int, vis map[Pos]bool
 
             var res float64
             switch val {
-            case "+": res = useA + useB
-            case "-": res = useA - useB
-            case "*": res = useA * useB
-            case "/": res = useA / useB
-            case "^": res = math.Pow(useA, useB)
+            case "+":
+                res = useA + useB
+            case "-":
+                res = useA - useB
+            case "*":
+                res = useA * useB
+            case "/":
+                if useB == 0 {
+                    return "#DIV/0!"
+                }
+                res = useA / useB
+            case "^":
+                res = math.Pow(useA, useB)
             }
             s.Push(strconv.FormatFloat(res, 'f', 2, 64))
         }
-    } 
+    }
 
-    if s.IsEmpty() { return "0", "" }
+    if s.IsEmpty() {
+        return "0"
+    }
 
     finalVal, _ := s.Pop()
     if GetType(finalVal) == "ref" {
         resolvedVal, _, errStr := CheckValidRef(finalVal, table, vis)
-        return resolvedVal, errStr
+        if errStr != "" {
+            return errStr
+        }
+        return resolvedVal
     }
 
-    return finalVal, ""
+    return finalVal
 }
 
 func ParseExpr(cell string, table [][]string, r int, c int, vis map[Pos]bool) string {
     postfix := InfixToPostfix(cell)
-    result, err := EvalExpr(postfix, table, r, c, vis)
-    if err != "" {
-        fmt.Println(err)
-        os.Exit(1)
-    }
+    result := EvalExpr(postfix, table, r, c, vis)
     return result
 }
 
@@ -280,6 +295,10 @@ func ParseFile(table [][]string) [][]string{
 	for r := 1; r < len(table); r++ {
 		for c := 0; c < len(table[r]); c++ {
 			cell := table[r][c]
+			if cell == "" {
+                table[r][c] = "0"
+                continue
+            }
 			if cell[0] == '=' {
 				var vis map[Pos]bool = make(map[Pos]bool)
 				modifiedCell := ParseExpr(cell, table, r, c, vis)
@@ -369,7 +388,7 @@ func UnpackFile(inputFile string) {
 
 	table, err := r.ReadAll()
 	if err != nil {
-		fmt.Println("Couldn't read the file.")
+		fmt.Println(err)
 		os.Exit(1)
 	}
 	table = cleanTable(table)
