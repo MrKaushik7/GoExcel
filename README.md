@@ -1,5 +1,7 @@
 # GoExcel
 
+### Disclaimer: Have not implemented (yet) relative file paths or intelligent searches, you should use the full filepath for the input csv
+
 * A simple implementation of Excel in GoLang without the UI
 * batch program which accepts a CSV input and a stream of commands, that outputs a modified CSV file.
 * Example ->
@@ -27,3 +29,6 @@ Internally separated by '|' to avoid function argument conflicts.
 Build & Run with:
 go build -o GoExcel main.go
 ./GoExcel start inputFileName.csv //should be '|' separated
+
+
+
